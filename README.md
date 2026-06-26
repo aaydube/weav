@@ -4,6 +4,23 @@ Py is a modern, high-fidelity visual workflow builder that enables users to desi
 
 ---
 
+## 🎥 Demo Video
+
+<p align="center">
+  <a href="https://drive.google.com/file/d/1WIFTEzMHHrYLFx-hD393NragIsZWU0Pd/view?usp=sharing" target="_blank">
+    <img src="https://drive.google.com/thumbnail?id=1WIFTEzMHHrYLFx-hD393NragIsZWU0Pd&sz=w800" alt="Watch Py Demo Video" width="600" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+  </a>
+</p>
+<p align="center">
+  <a href="https://drive.google.com/file/d/1WIFTEzMHHrYLFx-hD393NragIsZWU0Pd/view?usp=sharing" target="_blank">
+    <b>▶️ Watch the Demo Video </b>
+  </a>
+</p>
+
+
+
+---
+
 ## ✨ Key Features
 
 - 🎨 **Visual Canvas Editor**: A drag-and-drop canvas built with [XYFlow (React Flow)](https://reactflow.dev/) for designing custom automation pipelines.
