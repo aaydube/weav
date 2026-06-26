@@ -137,42 +137,46 @@ async function runWorkflowExecutor(
                 const parentOutput = nodeStates[edge.source]?.output;
                 if (!parentOutput) return;
 
-                // Grab string values or cropped images from parent outputs
                 const sourceHandle = edge.sourceHandle || "";
                 const targetHandle = edge.targetHandle || "";
 
+                // Get string value if any
+                const textVal = parentOutput.output || parentOutput.product_text || "";
+                // Get image url if any
+                const imageVal = parentOutput.cropped_image || parentOutput.product_photo || parentOutput.output;
+
+                if (targetHandle === "text") {
+                  parentOutputs["text"] = textVal;
+                } else if (targetHandle === "tweet") {
+                  parentOutputs["tweet"] = textVal;
+                } else if (targetHandle === "image_1") {
+                  if (imageVal) {
+                    images.push(imageVal);
+                    parentOutputs["image_1"] = "[Image 1]";
+                  }
+                } else if (targetHandle === "image_2") {
+                  if (imageVal) {
+                    images.push(imageVal);
+                    parentOutputs["image_2"] = "[Image 2]";
+                  }
+                }
+
+                // Fallbacks to keep existing templates working
                 if (sourceHandle === "product_text") {
                   parentOutputs["product_text"] = parentOutput.product_text || "";
                 } else if (sourceHandle === "output") {
-                  parentOutputs["long_description"] = parentOutput.output || "";
-                  parentOutputs["tweet"] = parentOutput.output || "";
+                  parentOutputs["long_description"] = textVal;
+                  parentOutputs["output"] = textVal;
                 } else if (sourceHandle === "product_photo") {
                   parentOutputs["product_photo"] = "[Product Photo]";
                 } else if (sourceHandle === "cropped_image") {
                   parentOutputs["cropped_image"] = "[Cropped Image]";
                 }
-
-                // If target handle is image_1 or image_2, collect the image URL/base64
-                if (targetHandle === "image_1") {
-                  const imageUrl = parentOutput.cropped_image || parentOutput.product_photo || parentOutput.output;
-                  if (imageUrl) {
-                    images.push(imageUrl);
-                    parentOutputs["cropped_image_1"] = "[Cropped Image 1]";
-                    parentOutputs["image_1"] = "[Image 1]";
-                  }
-                } else if (targetHandle === "image_2") {
-                  const imageUrl = parentOutput.cropped_image || parentOutput.product_photo || parentOutput.output;
-                  if (imageUrl) {
-                    images.push(imageUrl);
-                    parentOutputs["cropped_image_2"] = "[Cropped Image 2]";
-                    parentOutputs["image_2"] = "[Image 2]";
-                  }
-                }
               });
 
-              // Replace variables like {product_text}, {long_description}, {tweet}, etc.
+              // Replace variables safely using split/join
               Object.entries(parentOutputs).forEach(([key, val]) => {
-                prompt = prompt.replace(new RegExp(`{${key}}`, "g"), val);
+                prompt = prompt.split(`{${key}}`).join(val);
               });
 
               // ---------------------------------------------------------
@@ -216,7 +220,8 @@ async function runWorkflowExecutor(
                 return out.cropped_image || out.croppedImage || out.croppedImageUrl || out.product_photo || out.productPhoto || out.output || null;
               };
 
-              const text = incomingTextEdge ? nodeStates[incomingTextEdge.source]?.output?.output : "";
+              const textOutput = incomingTextEdge ? nodeStates[incomingTextEdge.source]?.output : null;
+              const text = textOutput ? (textOutput.output || textOutput.product_text || "") : "";
               const img1 = incomingImg1Edge ? getImgVal(incomingImg1Edge.source) : null;
               const img2 = incomingImg2Edge ? getImgVal(incomingImg2Edge.source) : null;
 

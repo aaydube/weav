@@ -147,8 +147,7 @@ function CanvasContent({ id }: { id: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           nodes, 
-          edges,
-          runOnlyNodeIds: selectedNodeIds.length > 0 ? selectedNodeIds : undefined
+          edges
         }),
       });
 
