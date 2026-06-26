@@ -1,5 +1,5 @@
 import { task, tasks, runs } from "@trigger.dev/sdk";
-import { db } from "../app/lib/db";
+import { db } from "@/app/lib/db";
 import { cropImageTask } from "./cropImage";
 import { runGeminiTask } from "./geminiNode";
 
