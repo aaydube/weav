@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { db } from "../../../../lib/db";
-import { getUserId } from "../../../../lib/auth-util";
+import { db } from "@/app/lib/db";
+import { getUserId } from "@/app/lib/auth-util";
 import { tasks } from "@trigger.dev/sdk";
-import { executeWorkflowTask } from "../../../../trigger/workflowExecutor";
+import { executeWorkflowTask } from "@/trigger/workflowExecutor";
 
 export async function POST(
   req: Request,
