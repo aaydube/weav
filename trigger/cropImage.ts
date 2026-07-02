@@ -23,6 +23,7 @@ export const cropImageTask = task({
       `CropImage task started. aspectRatio=${payload.aspectRatio}, url starts with: ${payload.imageUrl.slice(0, 60)}`
     );
 
+    
     // ── 1. Fetch image buffer ───────────────────────────────────────
     let inputBuffer: Buffer;
 
