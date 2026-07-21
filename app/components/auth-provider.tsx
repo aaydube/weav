@@ -3,9 +3,17 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ClerkProvider, UserButton as ClerkUserButton, SignIn as ClerkSignIn, SignUp as ClerkSignUp, useAuth as useClerkAuth, useUser as useClerkUser } from "@clerk/nextjs";
+import { Eye, EyeOff, LogOut, ArrowUpRight } from "lucide-react";
 
 // Check if Clerk is configured
-const isClerkConfigured = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
+const isClerkConfigured = !!clerkKey && clerkKey.startsWith("pk_") && !clerkKey.includes("your_");
+
+// ── Design tokens (shared with the sign-in / sign-up hero panels) ──────────
+// Only the tokens referenced via inline style below are kept here; the rest
+// of the palette is applied directly as Tailwind arbitrary-value classes.
+const GRAPHITE = "#74786F";
+const mono = { fontFamily: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace" };
 
 // Mock Auth Context
 interface MockAuthContextType {
@@ -43,15 +51,17 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Read auth status from localStorage
+    // Read auth status from localStorage and sync cookie
     const savedAuth = localStorage.getItem("py_auth_user");
     if (savedAuth) {
       try {
         const u = JSON.parse(savedAuth);
         setUser(u);
         setIsSignedIn(true);
+        document.cookie = `py_auth_token=${u.id}; path=/; max-age=31536000; SameSite=Lax`;
       } catch (e) {
         localStorage.removeItem("py_auth_user");
+        document.cookie = "py_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT;";
       }
     }
     setIsLoaded(true);
@@ -60,11 +70,11 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   // Simple route guard simulation
   useEffect(() => {
     if (!isLoaded) return;
-    const publicPaths = ["/sign-in", "/sign-up", "/"];
+    const publicPaths = ["/sign-in", "/sign-up"];
     const isPublicPath = publicPaths.includes(pathname);
-    if (!isSignedIn && !isPublicPath) {
+    if (!isSignedIn && !isPublicPath && pathname !== "/") {
       router.push("/sign-in");
-    } else if (isSignedIn && isPublicPath && pathname !== "/") {
+    } else if (isSignedIn && isPublicPath) {
       router.push("/dashboard");
     }
   }, [isSignedIn, isLoaded, pathname, router]);
@@ -80,8 +90,8 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
       emailAddress: email,
     };
     localStorage.setItem("py_auth_user", JSON.stringify(mockUser));
-    // Set a cookie for middleware
-    document.cookie = `py_auth_token=${mockUser.id}; path=/`;
+    // Set a long-lived cookie for middleware and server requests
+    document.cookie = `py_auth_token=${mockUser.id}; path=/; max-age=31536000; SameSite=Lax`;
     setUser(mockUser);
     setIsSignedIn(true);
     router.push("/dashboard");
@@ -97,7 +107,7 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
       emailAddress: email,
     };
     localStorage.setItem("py_auth_user", JSON.stringify(mockUser));
-    document.cookie = `py_auth_token=${mockUser.id}; path=/`;
+    document.cookie = `py_auth_token=${mockUser.id}; path=/; max-age=31536000; SameSite=Lax`;
     setUser(mockUser);
     setIsSignedIn(true);
     router.push("/dashboard");
@@ -106,7 +116,7 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = () => {
     localStorage.removeItem("py_auth_user");
     // Clear cookie
-    document.cookie = "py_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+    document.cookie = "py_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT;";
     setUser(null);
     setIsSignedIn(false);
     router.push("/sign-in");
@@ -229,30 +239,31 @@ function MockUserButton() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
+        className="flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EA5A2B] focus-visible:ring-offset-2"
       >
         <img
           src={user.imageUrl}
           alt={user.fullName}
-          className="h-9 w-9 rounded-full border border-zinc-200 bg-white p-0.5 hover:opacity-90 dark:border-zinc-800"
+          className="h-9 w-9 rounded-md border border-[#DBDED4] bg-white p-0.5 hover:border-[#15191F]/40 transition-colors"
         />
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-56 origin-top-right rounded-xl border border-zinc-200 bg-white p-2 shadow-lg ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-950 z-50">
-            <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-900 mb-1">
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{user.fullName}</p>
-              <p className="text-xs text-zinc-500 truncate dark:text-zinc-400">{user.emailAddress}</p>
+          <div className="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-[#DBDED4] bg-white p-2 shadow-lg">
+            <div className="mb-1 border-b border-[#EFF1EA] px-3 py-2">
+              <p className="text-sm font-semibold text-[#15191F]">{user.fullName}</p>
+              <p className="truncate text-xs" style={{ ...mono, color: GRAPHITE }}>{user.emailAddress}</p>
             </div>
             <button
               onClick={() => {
                 setOpen(false);
                 signOut();
               }}
-              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#B23A15] transition-colors hover:bg-[#EA5A2B]/[0.08]"
             >
+              <LogOut className="h-3.5 w-3.5" />
               Sign out
             </button>
           </div>
@@ -264,7 +275,6 @@ function MockUserButton() {
 
 // Export Auth Form configurations
 export function SignIn() {
-  const router = useRouter();
   if (isClerkConfigured) {
     return <ClerkSignIn routing="path" path="/sign-in" />;
   }
@@ -282,56 +292,147 @@ function MockSignInForm() {
   const { signIn } = useContext(MockAuthContext);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
-    signIn(email);
+    setIsLoading(true);
+    setTimeout(() => {
+      signIn(email);
+    }, 400);
+  };
+
+  const handleQuickSignIn = (demoEmail: string) => {
+    setEmail(demoEmail);
+    setIsLoading(true);
+    setTimeout(() => {
+      signIn(demoEmail);
+    }, 300);
   };
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mb-6 text-center">
-        <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Sign in to Py</h2>
-        <p className="text-sm text-zinc-500 mt-2 dark:text-zinc-400">Welcome back! Please enter your details.</p>
+    <div className="w-full max-w-md rounded-xl border border-[#DBDED4] bg-white p-8 sm:p-10">
+      {/* Header */}
+      <div className="mb-7">
+        <div className="mb-4 inline-flex items-center gap-1.5 rounded-sm border border-[#DBDED4] bg-[#F2F4EF] px-2.5 py-1 text-[10px] font-semibold" style={mono}>
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+          <span style={{ color: GRAPHITE }}>ACCESS · DEMO MODE</span>
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight text-[#15191F] sm:text-[1.75rem]">
+          Sign in to Weav
+        </h2>
+        <p className="mt-1.5 text-sm text-[#5B5F54]">
+          Pick up where you left off, or try a demo workspace below.
+        </p>
       </div>
 
+      {/* Quick Demo Presets */}
+      <div className="mb-6">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider" style={{ ...mono, color: GRAPHITE }}>
+          Demo accounts
+        </p>
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={() => handleQuickSignIn("alex.engineer@weav.ai")}
+            className="group flex items-center gap-2.5 rounded-md border border-[#DBDED4] bg-[#F2F4EF] px-3.5 py-2.5 text-left transition-colors hover:border-[#15191F]/30 hover:bg-white"
+          >
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] bg-[#15191F] text-xs font-bold text-white" style={mono}>
+              A
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold text-[#15191F]">Alex Chen</p>
+              <p className="truncate text-[10px]" style={{ ...mono, color: GRAPHITE }}>AI Lead</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickSignIn("sarah.smith@weav.ai")}
+            className="group flex items-center gap-2.5 rounded-md border border-[#DBDED4] bg-[#F2F4EF] px-3.5 py-2.5 text-left transition-colors hover:border-[#15191F]/30 hover:bg-white"
+          >
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] bg-[#33608A] text-xs font-bold text-white" style={mono}>
+              S
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold text-[#15191F]">Sarah Smith</p>
+              <p className="truncate text-[10px]" style={{ ...mono, color: GRAPHITE }}>Architect</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div className="relative my-6 flex items-center justify-center">
+        <span className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-dashed border-[#DBDED4]" />
+        </span>
+        <span className="relative bg-white px-3 text-[10px] font-semibold uppercase tracking-wider" style={{ ...mono, color: GRAPHITE }}>
+          Or sign in with email
+        </span>
+      </div>
+
+      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Email Address</label>
+          <label className="mb-1.5 block text-xs font-semibold text-[#15191F]">
+            Email address
+          </label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="demo@galaxy.ai"
+            placeholder="name@company.com"
             required
-            className="mt-1 block w-full px-4 py-2 border border-zinc-300 rounded-lg text-zinc-900 bg-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+            className="w-full rounded-md border border-[#DBDED4] bg-[#F9FAF7] px-4 py-2.5 text-sm text-[#15191F] placeholder-[#9CA093] transition-all focus:border-[#EA5A2B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#EA5A2B]/15"
           />
         </div>
+
         <div>
-          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className="mt-1 block w-full px-4 py-2 border border-zinc-300 rounded-lg text-zinc-900 bg-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
-          />
+          <label className="mb-1.5 block text-xs font-semibold text-[#15191F]">
+            Password
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-md border border-[#DBDED4] bg-[#F9FAF7] px-4 py-2.5 pr-10 text-sm text-[#15191F] placeholder-[#9CA093] transition-all focus:border-[#EA5A2B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#EA5A2B]/15"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA093] transition-colors hover:text-[#15191F]"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
         <button
           type="submit"
-          className="w-full py-2 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-colors cursor-pointer"
+          disabled={isLoading}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[#EA5A2B] px-4 py-3 text-sm font-bold text-white transition-all hover:bg-[#D64F22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EA5A2B] focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-70"
         >
-          Sign In as Demo User
+          {isLoading ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          ) : (
+            <>
+              Sign in
+              <ArrowUpRight className="h-4 w-4" />
+            </>
+          )}
         </button>
       </form>
 
-      <div className="mt-6 text-center">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Don't have an account?{" "}
-          <a href="/sign-up" className="font-semibold text-violet-600 hover:text-violet-500">
-            Sign up
+      <div className="mt-7 text-center">
+        <p className="text-xs text-[#5B5F54]">
+          New to Weav?{" "}
+          <a href="/sign-up" className="font-bold text-[#33608A] hover:text-[#264A6C]">
+            Create an account
           </a>
         </p>
       </div>
@@ -344,69 +445,96 @@ function MockSignUpForm() {
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !firstName || !lastName) return;
-    signUp(email, firstName, lastName);
+    setIsLoading(true);
+    setTimeout(() => {
+      signUp(email, firstName, lastName);
+    }, 400);
   };
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mb-6 text-center">
-        <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Create your account</h2>
-        <p className="text-sm text-zinc-500 mt-2 dark:text-zinc-400">Start building your automated LLM workflows.</p>
+    <div className="w-full max-w-md rounded-xl border border-[#DBDED4] bg-white p-8 sm:p-10">
+      <div className="mb-7">
+        <div className="mb-4 inline-flex items-center gap-1.5 rounded-sm border border-[#DBDED4] bg-[#F2F4EF] px-2.5 py-1 text-[10px] font-semibold" style={mono}>
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+          <span style={{ color: GRAPHITE }}>ACCESS · INSTANT SETUP</span>
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight text-[#15191F] sm:text-[1.75rem]">
+          Create your Weav account
+        </h2>
+        <p className="mt-1.5 text-sm text-[#5B5F54]">
+          Start wiring Gemini 2.5 models into pipelines in minutes.
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">First Name</label>
+            <label className="mb-1.5 block text-xs font-semibold text-[#15191F]">
+              First name
+            </label>
             <input
               type="text"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               placeholder="Alex"
               required
-              className="mt-1 block w-full px-4 py-2 border border-zinc-300 rounded-lg text-zinc-900 bg-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+              className="w-full rounded-md border border-[#DBDED4] bg-[#F9FAF7] px-4 py-2.5 text-sm text-[#15191F] placeholder-[#9CA093] transition-all focus:border-[#EA5A2B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#EA5A2B]/15"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Last Name</label>
+            <label className="mb-1.5 block text-xs font-semibold text-[#15191F]">
+              Last name
+            </label>
             <input
               type="text"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Smith"
               required
-              className="mt-1 block w-full px-4 py-2 border border-zinc-300 rounded-lg text-zinc-900 bg-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+              className="w-full rounded-md border border-[#DBDED4] bg-[#F9FAF7] px-4 py-2.5 text-sm text-[#15191F] placeholder-[#9CA093] transition-all focus:border-[#EA5A2B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#EA5A2B]/15"
             />
           </div>
         </div>
+
         <div>
-          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Email Address</label>
+          <label className="mb-1.5 block text-xs font-semibold text-[#15191F]">
+            Work email address
+          </label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="alex.smith@example.com"
+            placeholder="alex.smith@company.com"
             required
-            className="mt-1 block w-full px-4 py-2 border border-zinc-300 rounded-lg text-zinc-900 bg-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+            className="w-full rounded-md border border-[#DBDED4] bg-[#F9FAF7] px-4 py-2.5 text-sm text-[#15191F] placeholder-[#9CA093] transition-all focus:border-[#EA5A2B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#EA5A2B]/15"
           />
         </div>
 
         <button
           type="submit"
-          className="w-full py-2 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-colors cursor-pointer"
+          disabled={isLoading}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[#EA5A2B] px-4 py-3 text-sm font-bold text-white transition-all hover:bg-[#D64F22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EA5A2B] focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-70"
         >
-          Sign Up & Get Started
+          {isLoading ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          ) : (
+            <>
+              Create account
+              <ArrowUpRight className="h-4 w-4" />
+            </>
+          )}
         </button>
       </form>
 
-      <div className="mt-6 text-center">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <div className="mt-7 text-center">
+        <p className="text-xs text-[#5B5F54]">
           Already have an account?{" "}
-          <a href="/sign-in" className="font-semibold text-violet-600 hover:text-violet-500">
+          <a href="/sign-in" className="font-bold text-[#33608A] hover:text-[#264A6C]">
             Sign in
           </a>
         </p>

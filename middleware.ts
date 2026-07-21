@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const isClerkConfigured = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
+const isClerkConfigured = !!clerkKey && clerkKey.startsWith("pk_") && !clerkKey.includes("your_");
 
 const isProtectedRoute = createRouteMatcher([
   "/dashboard(.*)",
@@ -23,16 +24,23 @@ export function middleware(req: NextRequest, event: any) {
   const { pathname } = req.nextUrl;
   
   // Public paths that do not require login
-  const publicPaths = ["/sign-in", "/sign-up", "/favicon.ico", "/next.svg", "/vercel.svg", "/window.svg", "/globe.svg", "/file.svg"];
+  const publicPaths = ["/sign-in", "/sign-up", "/favicon.ico", "/icon", "/apple-icon", "/next.svg", "/vercel.svg", "/window.svg", "/globe.svg", "/file.svg"];
   const isPublicPath = publicPaths.some((p) => pathname === p || pathname.startsWith("/_next"));
 
   const token = req.cookies.get("py_auth_token")?.value;
+
+  // Root path redirection
+  if (pathname === "/") {
+    const url = req.nextUrl.clone();
+    url.pathname = token ? "/dashboard" : "/sign-in";
+    return NextResponse.redirect(url);
+  }
 
   if (!token) {
     if (pathname.startsWith("/api/workflows")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!isPublicPath && pathname !== "/") {
+    if (!isPublicPath) {
       const url = req.nextUrl.clone();
       url.pathname = "/sign-in";
       return NextResponse.redirect(url);

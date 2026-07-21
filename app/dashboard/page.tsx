@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserButton, useUser } from "../components/auth-provider";
+import { WeavMark } from "../components/weav-mark";
 import {
   Plus,
   Trash2,
@@ -13,7 +14,6 @@ import {
   X,
   Loader2,
   ArrowRight,
-  Layers,
   Activity,
   CheckCircle2,
   AlertCircle,
@@ -289,10 +289,10 @@ export default function Dashboard() {
       <header className="sticky top-0 z-30 h-14 bg-white border-b border-zinc-100 px-6 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="h-7 w-7 rounded-lg bg-violet-600 flex items-center justify-center shadow-sm shadow-violet-600/30">
-            <Layers className="h-3.5 w-3.5 text-white" />
+            <WeavMark className="h-3.5 w-3.5 text-white" />
           </div>
           <span className="font-black text-base text-zinc-900 tracking-tight">
-            Py
+            Weav
           </span>
           <span className="text-zinc-200 mx-1 select-none">·</span>
           <span className="text-[10px] text-zinc-400 font-bold tracking-widest uppercase">

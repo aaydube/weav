@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Py - LLM Workflow Builder",
+  title: "Weav - LLM Workflow Builder",
   description: "Pixel-perfect LLM workflow builder inspired by Galaxy.ai",
 };
 

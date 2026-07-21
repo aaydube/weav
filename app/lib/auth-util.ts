@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 
-const isClerkConfigured = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
+const isClerkConfigured = !!clerkKey && clerkKey.startsWith("pk_") && !clerkKey.includes("your_");
 
 export async function getUserId(): Promise<string | null> {
   if (isClerkConfigured) {
@@ -18,8 +19,7 @@ export async function getUserId(): Promise<string | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get("py_auth_token")?.value;
-    // We expect the mock token to be the user ID (e.g. "usr_xxxx")
-    if (token && token !== "mock_token") {
+    if (token && token.trim().length > 0) {
       return token;
     }
   } catch (e) {
