@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+﻿import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import fs from "fs";
@@ -117,7 +117,7 @@ const getSampleWorkflow = (userId: string = "default-user") => {
       data: {
         title: "Gemini: Write Description",
         prompt: "Write a detailed, premium product marketing description. Focus on the benefits of battery life and active noise cancellation. Details: {product_text}",
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-pro",
         temperature: 0.7,
         textOutput: "",
       },
@@ -129,7 +129,7 @@ const getSampleWorkflow = (userId: string = "default-user") => {
       data: {
         title: "Gemini: Condense to Tweet",
         prompt: "Condense this description into a punchy Twitter post under 280 characters with relevant hashtags. Description: {long_description}",
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.5,
         textOutput: "",
       },
@@ -141,7 +141,7 @@ const getSampleWorkflow = (userId: string = "default-user") => {
       data: {
         title: "Gemini: Combine into Post",
         prompt: "Combine the following tweet: {tweet} and describe the two accompanying product shots ({cropped_image_1} and {cropped_image_2}) to form a cohesive, high-converting social media marketing post.",
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-pro",
         temperature: 0.7,
         textOutput: "",
       },

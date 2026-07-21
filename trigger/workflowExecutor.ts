@@ -211,7 +211,7 @@ export const executeWorkflowTask = task({
                 // ---------------------------------------------------------
                 // TRIGGER.DEV INTEGRATION: GEMINI PRO
                 // ---------------------------------------------------------
-                const rawModelName = node.data.model || "gemini-1.5-pro";
+                const rawModelName = node.data.model || "gemini-2.5-pro";
                 
                 // Step 1: Fire the task
                 console.log("DEBUG: Sending to Gemini ->", { 

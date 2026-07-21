@@ -13,8 +13,7 @@ export const runGeminiTask = task({
     // GEMINI_API_KEY must be set in your Trigger.dev dashboard environment variables
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
-    // Use a valid model name — "gemini-3.1-pro" does not exist
-    const modelName = payload.model || "gemini-1.5-pro";
+    const modelName = payload.model || "gemini-2.5-pro";
 
     const model = genAI.getGenerativeModel({
       model: modelName,

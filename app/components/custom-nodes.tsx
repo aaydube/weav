@@ -358,12 +358,12 @@ export function GeminiProNode({ id, data, selected }: NodeProps) {
           <div className="flex flex-col gap-0.5">
             <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">Model</span>
             <select
-              value={(data.model as string) || "gemini-1.5-flash"}
+              value={(data.model as string) || "gemini-2.5-flash"}
               onChange={(e) => updateNodeData(id, { model: e.target.value })}
               className="w-full px-2 py-1 text-[10px] bg-zinc-50 border border-zinc-200 rounded-md text-zinc-700 focus:outline-none nodrag cursor-pointer"
             >
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
               <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
             </select>
           </div>
