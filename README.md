@@ -1,23 +1,6 @@
-#  Py : Multimodal AI Workflow Builder
+#  Weav : Multimodal AI Workflow Builder
 
-Py is a modern, high-fidelity visual workflow builder that enables users to design, connect, and execute automated pipelines combining Large Language Models (Gemini) and automated image processing. Built on Next.js, it leverages a node-based editor for the frontend and runs execution tasks reliably using a background worker system.
-
----
-
-## 🎥 Demo Video
-
-<p align="center">
-  <a href="https://drive.google.com/file/d/1WIFTEzMHHrYLFx-hD393NragIsZWU0Pd/view?usp=sharing" target="_blank">
-    <img src="https://drive.google.com/thumbnail?id=1WIFTEzMHHrYLFx-hD393NragIsZWU0Pd&sz=w800" alt="Watch Py Demo Video" width="600" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-  </a>
-</p>
-<p align="center">
-  <a href="https://drive.google.com/file/d/1WIFTEzMHHrYLFx-hD393NragIsZWU0Pd/view?usp=sharing" target="_blank">
-    <b>▶️ Watch the Demo Video </b>
-  </a>
-</p>
-
-
+Weav is a modern, high-fidelity visual workflow builder that enables users to design, connect, and execute automated pipelines combining Large Language Models (Gemini) and automated image processing. Built on Next.js, it leverages a node-based editor for the frontend and runs execution tasks reliably using a background worker system.
 
 ---
 
