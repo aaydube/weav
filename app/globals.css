@@ -1,9 +1,19 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
+/*
+ * Weav is a light-only "engineering schematic" surface — every screen
+ * hardcodes the paper/ink palette from weav-theme.tsx rather than
+ * following OS dark-mode, so no prefers-color-scheme override lives here.
+ */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #15191f;
+  --paper: #f2f4ef;
+  --ink: #15191f;
+  --signal: #ea5a2b;
+  --circuit: #33608a;
+  --line: #dbded4;
 }
 
 @theme inline {
@@ -13,15 +23,83 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Custom Schematic Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f2f4ef;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd0c4;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9fa697;
+}
+
+/* ReactFlow Handle Styling */
+.react-flow__handle {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 2px !important;
+  border: 1.5px solid #15191f !important;
+  background-color: #ffffff !important;
+  transition: all 0.2s ease !important;
+}
+.react-flow__handle:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 8px rgba(234, 90, 43, 0.6);
+}
+.react-flow__handle-connecting {
+  background-color: #ea5a2b !important;
+}
+.react-flow__handle-valid {
+  background-color: #1f8a6b !important;
+}
+
+/* Grid schematic pattern */
+.bg-schematic-grid {
+  background-color: #f2f4ef;
+  background-image: 
+    linear-gradient(to right, rgba(219, 222, 212, 0.7) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(219, 222, 212, 0.7) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.bg-schematic-grid-dark {
+  background-color: #0f1217;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* Keyframes */
+@keyframes signal-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(234, 90, 43, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(234, 90, 43, 0.8);
+  }
+}
+.animate-signal-glow {
+  animation: signal-glow 2s infinite ease-in-out;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+.animate-dash-flow {
+  animation: dash-flow 1.2s linear infinite;
 }

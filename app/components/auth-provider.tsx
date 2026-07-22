@@ -4,16 +4,11 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ClerkProvider, UserButton as ClerkUserButton, SignIn as ClerkSignIn, SignUp as ClerkSignUp, useAuth as useClerkAuth, useUser as useClerkUser } from "@clerk/nextjs";
 import { Eye, EyeOff, LogOut, ArrowUpRight } from "lucide-react";
+import { GRAPHITE, mono } from "./weav-theme";
 
 // Check if Clerk is configured
 const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
 const isClerkConfigured = !!clerkKey && clerkKey.startsWith("pk_") && !clerkKey.includes("your_");
-
-// ── Design tokens (shared with the sign-in / sign-up hero panels) ──────────
-// Only the tokens referenced via inline style below are kept here; the rest
-// of the palette is applied directly as Tailwind arbitrary-value classes.
-const GRAPHITE = "#74786F";
-const mono = { fontFamily: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace" };
 
 // Mock Auth Context
 interface MockAuthContextType {

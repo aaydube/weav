@@ -4,19 +4,7 @@ import React from "react";
 import { WeavMark } from "../../components/weav-mark";
 import { SignIn } from "../../components/auth-provider";
 import { ArrowUpRight } from "lucide-react";
-
-// ── Design tokens ────────────────────────────────────────────────────────
-// Paper: cool graph-paper white · Ink: near-black navy · Signal: live-orange
-// accent · Circuit: muted engineering blue for traces/links · Graphite:
-// muted supporting text · Line: hairline border tone.
-const INK = "#15191F";
-const SIGNAL = "#EA5A2B";
-const CIRCUIT = "#33608A";
-const GRAPHITE = "#74786F";
-const LINE = "#DBDED4";
-
-const display = { fontFamily: "'Space Grotesk', ui-sans-serif, system-ui, sans-serif" };
-const mono = { fontFamily: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace" };
+import { INK, SIGNAL, CIRCUIT, GRAPHITE, LINE, display, mono } from "../../components/weav-theme";
 
 function CornerMarks() {
   const base = "pointer-events-none absolute h-3 w-3 border-[#15191F]/20";
@@ -104,7 +92,6 @@ export default function SignInPage() {
         <div className="relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative flex h-10 w-10 items-center justify-center rounded-md bg-[#15191F] text-white shadow-sm">
-              <span aria-hidden="true" className="absolute -top-[3px] -left-[3px] h-[6px] w-[6px] rounded-full bg-[#EA5A2B]" />
               <WeavMark className="h-5 w-5" />
             </div>
             <div className="flex flex-col leading-tight">
@@ -182,7 +169,6 @@ export default function SignInPage() {
       <div className="relative flex flex-1 flex-col items-center justify-center bg-white p-6 sm:p-12 lg:p-16">
         <div className="mb-8 flex items-center gap-3 lg:hidden">
           <div className="relative flex h-9 w-9 items-center justify-center rounded-md bg-[#15191F] text-white">
-            <span aria-hidden="true" className="absolute -top-[3px] -left-[3px] h-[6px] w-[6px] rounded-full bg-[#EA5A2B]" />
             <WeavMark className="h-5 w-5" />
           </div>
           <span className="text-xl font-bold tracking-tight" style={display}>Weav</span>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./components/auth-provider";
 import { ClientInit } from "./components/client-init";
@@ -14,9 +14,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Signature typefaces for the "engineering schematic" design system —
+// display for headings, schematic mono for labels/tags/data throughout
+// weav-theme.tsx, the canvas nodes, and the sign-in/sign-up screens.
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-mono-schematic",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Weav - LLM Workflow Builder",
-  description: "Pixel-perfect LLM workflow builder inspired by Galaxy.ai",
+  description: "Build, wire, and run LLM pipelines on a visual canvas.",
 };
 
 export default function RootLayout({
@@ -27,9 +42,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 font-sans">
+      <body className="min-h-full flex flex-col bg-white text-[#15191F] font-sans">
         <AuthProvider>
           <ClientInit />
           {children}

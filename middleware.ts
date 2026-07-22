@@ -24,7 +24,7 @@ export function middleware(req: NextRequest, event: any) {
   const { pathname } = req.nextUrl;
   
   // Public paths that do not require login
-  const publicPaths = ["/sign-in", "/sign-up", "/favicon.ico", "/icon", "/apple-icon", "/next.svg", "/vercel.svg", "/window.svg", "/globe.svg", "/file.svg"];
+  const publicPaths = ["/sign-in", "/sign-up", "/favicon.ico", "/icon", "/apple-icon"];
   const isPublicPath = publicPaths.some((p) => pathname === p || pathname.startsWith("/_next"));
 
   const token = req.cookies.get("py_auth_token")?.value;

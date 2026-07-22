@@ -1,17 +1,37 @@
 "use client";
 
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ReactFlow, ReactFlowProvider, Controls, Background, useReactFlow } from "@xyflow/react";
+import Link from "next/link";
+import { ReactFlow, ReactFlowProvider, Controls, Background, MiniMap, Panel, useReactFlow } from "@xyflow/react";
 import { useCanvasStore } from "../../lib/canvas-store";
 import { nodeTypes } from "../../components/custom-nodes";
 import { UserButton, useUser } from "../../components/auth-provider";
+import { WeavMark } from "../../components/weav-mark";
+import {
+  INK,
+  SIGNAL,
+  CIRCUIT,
+  GRAPHITE,
+  LINE,
+  PAPER,
+  SUCCESS,
+  FAILED,
+  AUX,
+  display,
+  mono,
+  alpha,
+  WeavStyles,
+  CornerMarks,
+  StatusChip,
+  LogoChip,
+  MonoLabel,
+} from "../../components/weav-theme";
 import {
   ArrowLeft,
   Play,
   BrainCircuit,
   Image as ImageIcon,
-  History,
   X,
   Clock,
   CheckCircle,
@@ -23,9 +43,27 @@ import {
   Trash2,
   PanelLeft,
   Database,
-  Wallet,
   Download,
-  Upload
+  Upload,
+  Info,
+  Copy,
+  Check,
+  Maximize2,
+  Sliders,
+  Terminal,
+  Grid,
+  Search,
+  Sparkles,
+  Zap,
+  Plus,
+  RefreshCw,
+  Edit2,
+  Code,
+  Activity,
+  Layers,
+  ChevronRight,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 interface Workflow {
@@ -35,19 +73,55 @@ interface Workflow {
   runs: any[];
 }
 
+type ToastTone = "info" | "success" | "error";
+interface ToastMsg {
+  id: number;
+  tone: ToastTone;
+  message: string;
+}
+
+function getStatusTone(status: string): { color: string; bg: string; border: string } {
+  switch (status?.toUpperCase()) {
+    case "SUCCESS":
+    case "COMPLETED":
+      return { color: SUCCESS, bg: alpha(SUCCESS, 0.08), border: alpha(SUCCESS, 0.3) };
+    case "FAILED":
+      return { color: FAILED, bg: alpha(FAILED, 0.06), border: alpha(FAILED, 0.3) };
+    case "RUNNING":
+      return { color: SIGNAL, bg: alpha(SIGNAL, 0.08), border: alpha(SIGNAL, 0.3) };
+    default:
+      return { color: GRAPHITE, bg: "#F4F4F1", border: LINE };
+  }
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {
+          /* ignore */
+        }
+      }}
+      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-[#F2F4EF] hover:bg-[#DBDED4] text-[#15191F] transition-colors cursor-pointer"
+      style={mono}
+    >
+      {copied ? <Check className="h-3 w-3 text-[#1F8A6B]" /> : <Copy className="h-3 w-3 text-[#74786F]" />}
+      <span>{copied ? "COPIED" : "COPY JSON"}</span>
+    </button>
+  );
+}
+
 function CanvasContent({ id }: { id: string }) {
   const router = useRouter();
   const { user, isLoaded } = useUser();
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
-  // Redirect to sign-in if not authenticated
-  useEffect(() => {
-    if (isLoaded && !user) {
-      router.push("/sign-in");
-    }
-  }, [isLoaded, user?.id, router]);
-
-  // Zustand bindings
+  // Zustand state
   const {
     nodes,
     edges,
@@ -66,20 +140,39 @@ function CanvasContent({ id }: { id: string }) {
     setExecutingNodes,
     updateExecutingNode,
     setRunHistory,
-    resetExecutionStates
+    resetExecutionStates,
   } = useCanvasStore();
 
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyTab, setHistoryTab] = useState<"ui" | "api">("ui");
-  const [historyFilter, setHistoryFilter] = useState<"all" | "running" | "completed" | "canceled">("all");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Controls hidden sidebar
-  const [selectedRun, setSelectedRun] = useState<any | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isLogTerminalOpen, setIsLogTerminalOpen] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"config" | "payload" | "telemetry" | "json">("config");
+  const [gridMode, setGridMode] = useState<"light" | "dark">("light");
+  const [searchPalette, setSearchPalette] = useState("");
   const [pollingRunId, setPollingRunId] = useState<string | null>(null);
-  const importInputRef = React.useRef<HTMLInputElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [workflowTitle, setWorkflowTitle] = useState("");
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
 
-  // Fetch Workflow Config on mount
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const toastIdRef = useRef(0);
+
+  const pushToast = (message: string, tone: ToastTone = "info") => {
+    const toastId = ++toastIdRef.current;
+    setToasts((t) => [...t, { id: toastId, tone, message }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== toastId)), 4000);
+  };
+
+  useEffect(() => {
+    if (isLoaded && !user) {
+      router.push("/sign-in");
+    }
+  }, [isLoaded, user?.id, router]);
+
+  // Load Workflow on Mount
   useEffect(() => {
     const fetchWf = async () => {
       try {
@@ -87,113 +180,80 @@ function CanvasContent({ id }: { id: string }) {
         if (res.ok) {
           const data = await res.json();
           setWorkflow(data);
-          
-          // Populate Zustand
+          setWorkflowTitle(data.name || "Untitled Workflow");
+
           const parsedNodes = data.nodes ? JSON.parse(data.nodes) : [];
           const parsedEdges = data.edges ? JSON.parse(data.edges) : [];
           setNodes(parsedNodes);
           setEdges(parsedEdges);
           setRunHistory(data.runs || []);
+        } else {
+          pushToast("Couldn't load workflow configuration.", "error");
         }
       } catch (e) {
         console.error("Error loading workflow:", e);
+        pushToast("Network error loading workflow.", "error");
       }
     };
     fetchWf();
   }, [id]);
 
-  // Debounced auto-save canvas on node/edge changes (skips during active runs)
-  useEffect(() => {
-    if (!workflow) return;
-    if (isRunning) return; // Don't auto-save mid-run — outputs would overwrite blank state
-
+  // Save Workflow
+  const saveWorkflow = async () => {
     setSaveStatus("saving");
-    const delayDebounceFn = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/workflows/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nodes: JSON.stringify(nodes),
-            edges: JSON.stringify(edges),
-          }),
-        });
-        if (res.ok) {
-          setSaveStatus("saved");
-        } else {
-          setSaveStatus("error");
-        }
-      } catch (e) {
-        setSaveStatus("error");
-        console.error("Failed to save workflow:", e);
-      }
-    }, 1200);
+    try {
+      const res = await fetch(`/api/workflows/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: workflowTitle,
+          nodes: JSON.stringify(nodes),
+          edges: JSON.stringify(edges),
+        }),
+      });
+      setSaveStatus(res.ok ? "saved" : "error");
+    } catch (e) {
+      console.error("Failed to save workflow:", e);
+      setSaveStatus("error");
+    }
+  };
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [nodes, edges, isRunning]);
+  // Debounced auto-save
+  useEffect(() => {
+    if (!workflow || isRunning) return;
+    setSaveStatus("saving");
+    const t = setTimeout(saveWorkflow, 1200);
+    return () => clearTimeout(t);
+  }, [nodes, edges, workflowTitle, isRunning]);
 
-  // Run Workflow execution handler
+  // Execute Workflow
   const handleRunWorkflow = async () => {
     if (isRunning) return;
-
-    const selectedNodeIds = nodes.filter((n) => n.selected).map((n) => n.id);
-
     try {
       setIsRunning(true);
       resetExecutionStates();
-      
+
       const res = await fetch(`/api/workflows/${id}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          nodes, 
-          edges
-        }),
+        body: JSON.stringify({ nodes, edges }),
       });
 
       if (res.ok) {
         const data = await res.json();
         setPollingRunId(data.runId);
+        pushToast("Workflow execution initiated.", "info");
       } else {
         setIsRunning(false);
-        alert("Failed to start run");
+        pushToast("Failed to start workflow execution.", "error");
       }
     } catch (e) {
       setIsRunning(false);
-      console.error(e);
+      pushToast("Network error executing workflow.", "error");
     }
   };
 
-  // Cancel Workflow execution handler
-  const handleCancelWorkflow = async () => {
-    // Optimistically clear all running state immediately so the UI
-    // always responds — even if the API call is slow or fails.
-    const runIdToCancel = pollingRunId;
-    setPollingRunId(null);
-    setIsRunning(false);
-    resetExecutionStates();
-
-    if (!runIdToCancel) return;
-
-    try {
-      const res = await fetch(`/api/workflows/${id}/runs/${runIdToCancel}`, {
-        method: "POST",
-      });
-      // Refresh run history regardless of success/failure
-      const historyRes = await fetch(`/api/workflows/${id}`);
-      if (historyRes.ok) {
-        const updatedWf = await historyRes.json();
-        setRunHistory(updatedWf.runs || []);
-      }
-      if (!res.ok) {
-        console.warn("Cancel API returned non-OK, but local state was already cleared.");
-      }
-    } catch (e) {
-      console.error("Cancel error:", e);
-    }
-  };
-
-  // Poll Run Status
+  // Poll Execution Status
   useEffect(() => {
     if (!pollingRunId) return;
 
@@ -202,11 +262,9 @@ function CanvasContent({ id }: { id: string }) {
         const res = await fetch(`/api/workflows/${id}/runs/${pollingRunId}`);
         if (res.ok) {
           const run = await res.json();
-
-          // Always apply live log updates to nodes
-          const applyLogs = (logs: string) => {
+          if (run.logs) {
             try {
-              const nodeLogs = JSON.parse(logs);
+              const nodeLogs = JSON.parse(run.logs);
               const liveStates: Record<string, "idle" | "running" | "success" | "failed"> = {};
               Object.entries(nodeLogs).forEach(([nodeId, state]: [string, any]) => {
                 liveStates[nodeId] = state.status;
@@ -216,29 +274,18 @@ function CanvasContent({ id }: { id: string }) {
               });
               setExecutingNodes(liveStates);
             } catch (e) {
-              console.error("Failed to parse run logs:", e);
+              console.error(e);
             }
-          };
-
-          if (run.logs) {
-            applyLogs(run.logs);
           }
 
           if (run.status !== "RUNNING") {
-            // Run is done — do one final definitive fetch of the completed run
-            // to guarantee we apply the full final state to nodes
-            try {
-              const finalRes = await fetch(`/api/workflows/${id}/runs/${pollingRunId}`);
-              if (finalRes.ok) {
-                const finalRun = await finalRes.json();
-                if (finalRun.logs) {
-                  applyLogs(finalRun.logs);
-                }
-              }
-            } catch (_) {}
-
             setPollingRunId(null);
             setIsRunning(false);
+            if (run.status === "FAILED") {
+              pushToast("Execution failed. Inspect telemetry logs.", "error");
+            } else {
+              pushToast("Workflow execution completed successfully!", "success");
+            }
 
             const historyRes = await fetch(`/api/workflows/${id}`);
             if (historyRes.ok) {
@@ -248,380 +295,378 @@ function CanvasContent({ id }: { id: string }) {
           }
         }
       } catch (e) {
-        console.error("Polling error:", e);
+        console.error(e);
       }
-    }, 1500);
+    }, 1200);
 
     return () => clearInterval(interval);
-  }, [pollingRunId, updateNodeData]);
+  }, [pollingRunId]);
 
-  const onNodeClick = (_: any, node: any) => {
-    setSelectedNodeId(node.id);
-    setIsSidebarOpen(true); // Open settings sidebar when a node is clicked
-  };
+  // DAG Auto-Layout Handler
+  const handleAutoLayout = () => {
+    const horizontalGap = 320;
+    const verticalGap = 160;
 
-  const onPaneClick = () => {
-    setSelectedNodeId(null);
-  };
+    const updatedNodes = nodes.map((node, index) => {
+      let x = 100 + index * horizontalGap;
+      let y = 180 + (index % 2 === 0 ? 0 : verticalGap);
 
-  const addCropImageNode = () => {
-    const id = "crop_" + Math.random().toString(36).substring(2, 9);
-    const newNode = {
-      id,
-      type: "cropImage",
-      position: { x: 300, y: 200 },
-      data: {
-        title: "Crop Image",
-        aspectRatio: "1:1",
-        cropType: "tight",
-        croppedImage: null,
-        cropped_image: null,
-      },
-    };
-    setNodes([...nodes, newNode]);
-    setSelectedNodeId(id);
-  };
-
-  const addGeminiNode = () => {
-    const id = "gemini_" + Math.random().toString(36).substring(2, 9);
-    const newNode = {
-      id,
-      type: "geminiPro",
-      position: { x: 300, y: 350 },
-      data: {
-        title: "Gemini 3.1 Pro",
-        prompt: "",
-        model: "gemini-2.5-flash",
-        temperature: 0.7,
-        textOutput: "",
-      },
-    };
-    setNodes([...nodes, newNode]);
-    setSelectedNodeId(id);
-  };
-
-  const deleteSelectedNode = () => {
-    if (!selectedNodeId) return;
-    
-    const node = nodes.find((n) => n.id === selectedNodeId);
-    if (node?.type === "requestInputs" || node?.type === "responseNode") {
-      alert("Core workflow entry/exit nodes cannot be deleted!");
-      return;
-    }
-
-    setNodes(nodes.filter((n) => n.id !== selectedNodeId));
-    setEdges(edges.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId));
-    setSelectedNodeId(null);
-  };
-
-  // ── JSON Export ──────────────────────────────────────────────
-  const handleExport = () => {
-    const payload = {
-      name: workflow?.name || "workflow",
-      nodes,
-      edges,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${(workflow?.name || "workflow").replace(/\s+/g, "_")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // ── JSON Import ──────────────────────────────────────────────
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
-        alert("Invalid workflow JSON: must contain \"nodes\" and \"edges\" arrays.");
-        return;
+      if (node.type === "requestInputs") {
+        x = 80;
+        y = 200;
+      } else if (node.type === "cropImage") {
+        x = 440;
+        y = 80;
+      } else if (node.type === "geminiPro") {
+        x = 440;
+        y = 320;
+      } else if (node.type === "responseNode") {
+        x = 840;
+        y = 200;
       }
-      // Load into canvas
-      setNodes(parsed.nodes);
-      setEdges(parsed.edges);
-      // Persist to server
-      await fetch(`/api/workflows/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nodes: JSON.stringify(parsed.nodes),
-          edges: JSON.stringify(parsed.edges),
-          ...(parsed.name ? { name: parsed.name } : {}),
-        }),
-      });
-    } catch (err) {
-      alert("Failed to parse JSON file. Make sure it is a valid workflow export.");
-    } finally {
-      // Reset so the same file can be re-imported if needed
-      e.target.value = "";
-    }
+
+      return {
+        ...node,
+        position: { x, y },
+      };
+    });
+
+    setNodes(updatedNodes);
+    setTimeout(() => fitView({ padding: 0.2, duration: 600 }), 50);
+    pushToast("Canvas nodes arranged automatically.", "info");
   };
 
-  const getRunStatusIcon = (status: string) => {
-    switch (status) {
-      case "SUCCESS": return <CheckCircle className="h-4 w-4 text-emerald-600" />;
-      case "FAILED": return <AlertTriangle className="h-4 w-4 text-rose-600" />;
-      case "RUNNING": return <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />;
-      default: return <Clock className="h-4 w-4 text-zinc-400" />;
-    }
-  };
+  // Node Spawn Placement
+  const spawnNode = (type: string, defaultData: any) => {
+    const bounds = canvasWrapperRef.current?.getBoundingClientRect();
+    const center = bounds
+      ? screenToFlowPosition({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 })
+      : { x: 300, y: 200 };
 
-  const getRunStatusColor = (status: string) => {
-    switch (status) {
-      case "SUCCESS": return "text-emerald-700 bg-emerald-50 border-emerald-200";
-      case "FAILED": return "text-rose-700 bg-rose-5 border-rose-200";
-      case "RUNNING": return "text-amber-700 bg-amber-50 border-amber-200";
-      default: return "text-zinc-650 bg-zinc-100 border-zinc-200";
-    }
+    const count = nodes.filter((n) => n.type === type).length;
+    const offset = (count % 5) * 30;
+
+    const newNodeId = `${type}_${Math.random().toString(36).substring(2, 9)}`;
+    const newNode = {
+      id: newNodeId,
+      type,
+      position: { x: center.x - 100 + offset, y: center.y - 60 + offset },
+      data: defaultData,
+    };
+
+    setNodes([...nodes, newNode]);
+    setSelectedNodeId(newNodeId);
+    pushToast(`Added ${defaultData.title || type} node.`, "info");
   };
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
-  if (!isLoaded || !user) {
+  // Export JSON
+  const handleExportJSON = () => {
+    const spec = JSON.stringify({ name: workflowTitle, nodes, edges }, null, 2);
+    const blob = new Blob([spec], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${workflowTitle.toLowerCase().replace(/\s+/g, "_")}_spec.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    pushToast("Exported workflow JSON specification.", "success");
+  };
+
+  // Import JSON
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const spec = JSON.parse(event.target?.result as string);
+        if (spec.nodes && Array.isArray(spec.nodes)) {
+          setNodes(spec.nodes);
+          if (spec.edges && Array.isArray(spec.edges)) setEdges(spec.edges);
+          if (spec.name) setWorkflowTitle(spec.name);
+          pushToast("Successfully imported workflow JSON.", "success");
+        }
+      } catch {
+        pushToast("Invalid workflow JSON file.", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  if (!isLoaded || !user || !workflow) {
     return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#FAFAFA] text-zinc-655">
-        <Loader2 className="h-10 w-10 animate-spin text-violet-600 mb-4" />
-        <p className="text-sm font-semibold tracking-wide">Loading canvas...</p>
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#F2F4EF] gap-3">
+        <Loader2 className="h-5 w-5 animate-spin" style={{ color: SIGNAL }} />
+        <span className="text-xs font-bold uppercase tracking-wider" style={{ ...mono, color: GRAPHITE }}>
+          LOADING SCHEMATIC CANVAS…
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-screen w-screen bg-[#FAFAFA] text-zinc-800 overflow-hidden font-sans">
-      
-      {/* 4. Collapsible Left Sidebar - Node Drawer + Config (z-30) */}
-      <aside 
-        className={`h-full bg-white border-r border-zinc-200 shadow-xl z-30 transition-all duration-300 flex flex-col ${isSidebarOpen ? 'w-80' : 'w-0 overflow-hidden border-r-0'}`}
-      >
-        <div className="w-80 h-full flex flex-col">
-          <div className="p-4 border-b border-zinc-200 flex items-center bg-zinc-50/50 pt-6">
-            <div>
-              <h2 className="text-sm font-bold text-zinc-800 tracking-tight">Configuration Panel</h2>
-              <p className="text-[10px] text-zinc-400 mt-0.5">Add nodes & edit properties</p>
+    <div className="h-screen w-screen flex flex-col bg-[#F2F4EF] text-[#15191F] overflow-hidden selection:bg-[#EA5A2B] selection:text-white">
+      <WeavStyles />
+
+      {/* Hidden file picker for JSON import */}
+      <input type="file" ref={importInputRef} onChange={handleImportJSON} accept=".json" className="hidden" />
+
+      {/* ── Top Header Navigation Bar ────────────────────────────── */}
+      <header className="sticky top-0 z-40 h-14 bg-white/95 backdrop-blur-md border-b border-[#DBDED4] px-4 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="p-1.5 rounded-md hover:bg-[#F2F4EF] transition-colors text-[#74786F] hover:text-[#15191F]"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+
+          <LogoChip size="h-7 w-7">
+            <WeavMark className="w-4 h-4 text-[#EA5A2B]" />
+          </LogoChip>
+
+          <div className="h-4 w-px bg-[#DBDED4]" />
+
+          {/* Editable Title */}
+          {editingTitle ? (
+            <input
+              type="text"
+              autoFocus
+              value={workflowTitle}
+              onChange={(e) => setWorkflowTitle(e.target.value)}
+              onBlur={() => setEditingTitle(false)}
+              onKeyDown={(e) => e.key === "Enter" && setEditingTitle(false)}
+              className="bg-[#F2F4EF] border border-[#EA5A2B] rounded px-2 py-1 text-xs font-bold focus:outline-none"
+              style={display}
+            />
+          ) : (
+            <div
+              onClick={() => setEditingTitle(true)}
+              className="group flex items-center gap-2 cursor-pointer rounded px-2 py-1 hover:bg-[#F2F4EF] transition-colors"
+            >
+              <h1 className="font-bold text-sm text-[#15191F]" style={display}>
+                {workflowTitle}
+              </h1>
+              <Edit2 className="h-3 w-3 text-[#74786F] opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          )}
+
+          {/* Save Status Badge */}
+          <StatusChip
+            label={saveStatus === "saving" ? "SAVING..." : saveStatus === "saved" ? "SAVED" : "SAVE ERROR"}
+            color={saveStatus === "saving" ? SIGNAL : saveStatus === "saved" ? SUCCESS : FAILED}
+          />
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-3">
+          {/* Auto Layout Button */}
+          <button
+            onClick={handleAutoLayout}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#DBDED4] bg-white hover:bg-[#F2F4EF] text-xs font-bold transition-all text-[#15191F] cursor-pointer"
+            style={mono}
+            title="Arrange nodes automatically"
+          >
+            <Layers className="h-3.5 w-3.5 text-[#33608A]" />
+            <span>AUTO LAYOUT</span>
+          </button>
+
+          {/* Export JSON */}
+          <button
+            onClick={handleExportJSON}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#DBDED4] bg-white hover:bg-[#F2F4EF] text-xs font-bold transition-all text-[#15191F] cursor-pointer"
+            style={mono}
+            title="Export Spec JSON"
+          >
+            <Download className="h-3.5 w-3.5 text-[#74786F]" />
+            <span>EXPORT</span>
+          </button>
+
+          {/* Import JSON */}
+          <button
+            onClick={() => importInputRef.current?.click()}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#DBDED4] bg-white hover:bg-[#F2F4EF] text-xs font-bold transition-all text-[#15191F] cursor-pointer"
+            style={mono}
+            title="Import Spec JSON"
+          >
+            <Upload className="h-3.5 w-3.5 text-[#74786F]" />
+            <span>IMPORT</span>
+          </button>
+
+          {/* Primary RUN Button */}
+          <button
+            onClick={handleRunWorkflow}
+            disabled={isRunning}
+            className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold text-white transition-all shadow-md cursor-pointer ${
+              isRunning ? "bg-[#EA5A2B] animate-pulse cursor-not-allowed" : "bg-[#15191F] hover:bg-[#EA5A2B] hover:scale-102"
+            }`}
+            style={mono}
+          >
+            {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 text-[#EA5A2B]" />}
+            <span>{isRunning ? "RUNNING PIPELINE..." : "RUN PIPELINE"}</span>
+          </button>
+
+          <div className="h-4 w-px bg-[#DBDED4]" />
+
+          <UserButton />
+        </div>
+      </header>
+
+      {/* ── Main Canvas Viewport & Sidebars ──────────────────────── */}
+      <div className="flex-1 flex relative overflow-hidden">
+        {/* ── Left Node Palette Sidebar ──────────────────────────── */}
+        <aside
+          className={`z-30 w-72 bg-white border-r border-[#DBDED4] flex flex-col transition-all duration-300 ${
+            isSidebarOpen ? "translate-x-0" : "-translate-x-72 absolute"
+          }`}
+        >
+          {/* Palette Header */}
+          <div className="p-3.5 border-b border-[#DBDED4] flex items-center justify-between bg-[#F2F4EF]">
+            <MonoLabel className="text-[#33608A] font-bold">[NODE PALETTE]</MonoLabel>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1 text-[#74786F] hover:text-[#15191F] rounded hover:bg-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Palette Search */}
+          <div className="p-3 border-b border-[#DBDED4]">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#74786F]" />
+              <input
+                type="text"
+                placeholder="Search node types…"
+                value={searchPalette}
+                onChange={(e) => setSearchPalette(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-[#F2F4EF] border border-[#DBDED4] rounded text-xs focus:outline-none focus:border-[#EA5A2B]"
+              />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider mb-1">Add Dynamic Nodes</h3>
-              <button
-                onClick={addCropImageNode}
-                className="flex items-center gap-3 w-full p-3 rounded-xl border border-zinc-200 hover:border-zinc-300 bg-white hover:bg-zinc-50/40 transition-all text-left group cursor-pointer shadow-sm/5"
+          {/* Node Categories List */}
+          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+            {/* Category: Triggers */}
+            <div>
+              <MonoLabel className="block mb-2 text-[#74786F]">🚀 TRIGGERS & INPUTS</MonoLabel>
+              <div
+                onClick={() =>
+                  spawnNode("requestInputs", {
+                    title: "Request Inputs",
+                    product_text: "Sample query product input",
+                    product_photo: null,
+                  })
+                }
+                className="group p-2.5 rounded-md border border-[#DBDED4] bg-white hover:border-[#15191F] hover:shadow-xs transition-all cursor-pointer flex items-center gap-2.5"
               >
-                <div className="p-2 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-600 group-hover:scale-105 transition-transform">
+                <div className="p-1.5 rounded bg-[#F2F4EF] text-[#33608A]">
+                  <Database className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold group-hover:text-[#EA5A2B]" style={display}>
+                    Request Inputs
+                  </div>
+                  <div className="text-[10px] text-[#74786F]">Text query & photo trigger</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Category: AI Models */}
+            <div>
+              <MonoLabel className="block mb-2 text-[#EA5A2B]">🧠 AI & LLM MODELS</MonoLabel>
+              <div
+                onClick={() =>
+                  spawnNode("geminiPro", {
+                    title: "Gemini 3.1 Pro",
+                    prompt: "Analyze input product features",
+                    model: "gemini-2.5-flash",
+                    temperature: 0.7,
+                  })
+                }
+                className="group p-2.5 rounded-md border border-[#DBDED4] bg-white hover:border-[#15191F] hover:shadow-xs transition-all cursor-pointer flex items-center gap-2.5"
+              >
+                <div className="p-1.5 rounded bg-[#EA5A2B]/10 text-[#EA5A2B]">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold group-hover:text-[#EA5A2B]" style={display}>
+                    Gemini Flash / Pro LLM
+                  </div>
+                  <div className="text-[10px] text-[#74786F]">Multimodal prompt inference</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Category: Processors */}
+            <div>
+              <MonoLabel className="block mb-2 text-[#1F8A6B]">⚙️ MEDIA & PROCESSORS</MonoLabel>
+              <div
+                onClick={() =>
+                  spawnNode("cropImage", {
+                    title: "Aspect Crop Processor",
+                    aspectRatio: "1:1",
+                    cropType: "tight",
+                  })
+                }
+                className="group p-2.5 rounded-md border border-[#DBDED4] bg-white hover:border-[#15191F] hover:shadow-xs transition-all cursor-pointer flex items-center gap-2.5"
+              >
+                <div className="p-1.5 rounded bg-[#1F8A6B]/10 text-[#1F8A6B]">
                   <ImageIcon className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold block text-zinc-700 group-hover:text-zinc-900">Crop Image Node</span>
-                  <span className="text-[10px] text-zinc-450">Crops image via Trigger.dev + FFmpeg</span>
+                  <div className="text-xs font-bold group-hover:text-[#EA5A2B]" style={display}>
+                    Aspect Ratio Cropper
+                  </div>
+                  <div className="text-[10px] text-[#74786F]">1:1, 16:9, 4:5 image crop</div>
                 </div>
-              </button>
+              </div>
+            </div>
 
-              <button
-                onClick={addGeminiNode}
-                className="flex items-center gap-3 w-full p-3 rounded-xl border border-zinc-200 hover:border-zinc-300 bg-white hover:bg-zinc-50/40 transition-all text-left group cursor-pointer shadow-sm/5"
+            {/* Category: Outputs */}
+            <div>
+              <MonoLabel className="block mb-2 text-[#33608A]">📤 OUTPUTS & DISPATCH</MonoLabel>
+              <div
+                onClick={() =>
+                  spawnNode("responseNode", {
+                    title: "Response Output",
+                    text: "",
+                  })
+                }
+                className="group p-2.5 rounded-md border border-[#DBDED4] bg-white hover:border-[#15191F] hover:shadow-xs transition-all cursor-pointer flex items-center gap-2.5"
               >
-                <div className="p-2 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-650 group-hover:scale-105 transition-transform">
-                  <BrainCircuit className="h-4 w-4" />
+                <div className="p-1.5 rounded bg-[#33608A]/10 text-[#33608A]">
+                  <CheckCircle className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold block text-zinc-700 group-hover:text-zinc-900">Gemini 3.1 Pro Node</span>
-                  <span className="text-[10px] text-zinc-450">Google Gemini LLM executor</span>
+                  <div className="text-xs font-bold group-hover:text-[#EA5A2B]" style={display}>
+                    Formatted Output Display
+                  </div>
+                  <div className="text-[10px] text-[#74786F]">Final response preview</div>
                 </div>
-              </button>
+              </div>
             </div>
-
-            {/* Parameters configuration */}
-            {selectedNode ? (
-              <div className="flex flex-col gap-3.5 pt-6 border-t border-zinc-200">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider">Node settings</h3>
-                  {selectedNode.type !== "requestInputs" && selectedNode.type !== "responseNode" && (
-                    <button
-                      onClick={deleteSelectedNode}
-                      className="p-1 hover:bg-red-50 text-zinc-400 hover:text-red-650 rounded transition-colors cursor-pointer"
-                      title="Delete Node"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-zinc-400 uppercase font-semibold">Node Name</label>
-                  <input
-                    type="text"
-                    value={selectedNode.data.title as string || ""}
-                    onChange={(e) => updateNodeData(selectedNode.id, { title: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs text-zinc-750 focus:outline-none"
-                  />
-                </div>
-
-                {selectedNode.type === "cropImage" && (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-zinc-400 uppercase font-semibold">Crop Aspect Ratio</label>
-                      <select
-                        value={selectedNode.data.aspectRatio as string || "1:1"}
-                        onChange={(e) => updateNodeData(selectedNode.id, { aspectRatio: e.target.value })}
-                        className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-750 focus:outline-none cursor-pointer"
-                      >
-                        <option value="1:1">1:1 Square (Tight)</option>
-                        <option value="16:9">16:9 Banner (Wide)</option>
-                        <option value="4:3">4:3 Standard</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {selectedNode.type === "geminiPro" && (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-zinc-400 uppercase font-semibold">LLM Model</label>
-                      <select
-                        value={selectedNode.data.model as string || "gemini-2.5-flash"}
-                        onChange={(e) => updateNodeData(selectedNode.id, { model: e.target.value })}
-                        className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-750 focus:outline-none cursor-pointer"
-                      >
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                        <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-zinc-400 uppercase font-semibold">Prompt Template</label>
-                      <textarea
-                        value={selectedNode.data.prompt as string || ""}
-                        onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
-                        className="w-full min-h-[140px] px-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs text-zinc-750 focus:outline-none font-mono text-[10.5px] leading-relaxed"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center p-8 text-center text-zinc-400 border border-dashed border-zinc-200 rounded-2xl flex-1 max-h-[160px] mt-6 bg-zinc-50/20">
-                <FolderOpen className="h-6 w-6 text-zinc-300 mb-2" />
-                <span className="text-[10px] uppercase font-bold tracking-wider">Select a node</span>
-                <span className="text-[9px] text-zinc-450 mt-0.5">Click any node on the canvas to configure settings.</span>
-              </div>
-            )}
           </div>
-        </div>
-      </aside>
+        </aside>
 
-      {/* Main Canvas Area */}
-      <div className="relative flex-1 h-full z-0 overflow-hidden">
-        {/* 1. Top-Left Controls — sidebar toggle + workflow name tab */}
-        <div className="absolute top-4 left-4 z-40 flex items-center gap-2 max-w-[calc(50%-1rem)]">
+        {/* Toggle Palette Sidebar Button */}
+        {!isSidebarOpen && (
           <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-zinc-200 text-zinc-600 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:bg-zinc-50 transition-colors cursor-pointer"
+            onClick={() => setIsSidebarOpen(true)}
+            className="absolute left-4 top-4 z-30 inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-[#15191F] text-white text-xs font-bold shadow-lg hover:bg-[#262C35] cursor-pointer"
+            style={mono}
           >
-            <PanelLeft className="h-5 w-5" />
+            <PanelLeft className="h-4 w-4 text-[#EA5A2B]" />
+            <span>NODE LIBRARY</span>
           </button>
+        )}
 
-          <div className="flex h-10 min-w-0 items-center gap-2 rounded-xl bg-white border border-zinc-200 px-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="flex-shrink-0 text-zinc-500 hover:text-zinc-800 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <span className="text-sm font-semibold text-zinc-800 truncate min-w-0">
-              {workflow?.name || "New Workflow"}
-            </span>
-            {saveStatus === "saving" && <CloudLightning className="flex-shrink-0 h-3.5 w-3.5 text-zinc-400 animate-pulse" />}
-            {saveStatus === "saved" && <Cloud className="flex-shrink-0 h-3.5 w-3.5 text-zinc-300" />}
-          </div>
-        </div>
-
-        {/* 2. Floating Top-Right UI (Screenshot matched) */}
-        <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-3">
-          <div className="flex items-center gap-2">
-            {/* Status Pills */}
-            <div className="flex h-9 items-center gap-2 rounded-lg bg-white border border-zinc-200 px-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-xs text-zinc-600 font-medium tracking-wide">
-            
-              Viewing live run <span className="font-mono text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{id}</span>
-            </div>
-            <div className="flex h-9 items-center gap-1.5 rounded-lg bg-white border border-zinc-200 px-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-xs text-zinc-600 font-medium">
-              <Database className="h-3.5 w-3.5 text-zinc-400" /> Est 0.01 M
-            </div>
-            <div className="flex h-9 items-center gap-1.5 rounded-lg bg-white border border-zinc-200 px-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-xs text-zinc-600 font-medium">
-              <Wallet className="h-3.5 w-3.5 text-zinc-400" /> Bal 30.34 M
-            </div>
-            
-            {/* Profile & Controls */}
-            <div className="flex h-9 items-center justify-center rounded-lg bg-[#E2DEF8] border border-zinc-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] px-1.5 min-w-[36px]">
-              <UserButton />
-            </div>
-            
-            {/* Top Run Button */}
-           <button
-  onClick={handleRunWorkflow}
-  disabled={isRunning}
-  className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600 border border-violet-700 text-white hover:bg-violet-700 shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-  title="Run workflow"
->
-  {isRunning ? (
-    <Loader2 className="h-4 w-4 animate-spin text-white" />
-  ) : (
-    <Play className="h-4 w-4 fill-white text-white" />
-  )}
-</button>
-
-            {/* Cancel Button (Visible only when running) */}
-            {isRunning && (
-              <button 
-                onClick={handleCancelWorkflow}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-rose-100 text-rose-400 hover:text-rose-600 hover:bg-rose-50 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors cursor-pointer"
-                title="Cancel execution"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            
-            <button 
-              onClick={() => setHistoryOpen(!historyOpen)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-zinc-200 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-50 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors cursor-pointer"
-              title="Run history"
-            >
-              <Clock className="h-4 w-4" />
-            </button>
-            <button
-              onClick={handleExport}
-              title="Export workflow as JSON"
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-zinc-200 text-zinc-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors cursor-pointer"
-            >
-              <Download className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => importInputRef.current?.click()}
-              title="Import workflow from JSON"
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-zinc-200 text-zinc-500 hover:text-violet-600 hover:border-violet-200 hover:bg-violet-50 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors cursor-pointer"
-            >
-              <Upload className="h-4 w-4" />
-            </button>
-            {/* Hidden file input for JSON import */}
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleImportFile}
-              className="hidden"
-            />
-          </div>
-
-        </div>
-
-        {/* 3. React Flow Canvas (Base Layer) */}
-        <div className="absolute inset-0 z-0">
+        {/* ── Center ReactFlow Canvas Viewport ───────────────────── */}
+        <div ref={canvasWrapperRef} className="flex-1 h-full relative">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -629,425 +674,284 @@ function CanvasContent({ id }: { id: string }) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
+            onNodeClick={(_: any, node: any) => setSelectedNodeId(node.id)}
+            onPaneClick={() => setSelectedNodeId(null)}
             fitView
-            className="bg-[#FAFAFA]"
-            colorMode="light"
+            className={gridMode === "dark" ? "bg-schematic-grid-dark" : "bg-schematic-grid"}
           >
-            <Controls className="!bg-white !border-zinc-200 !rounded-xl !shadow-sm !mb-6 !ml-4" showInteractive={false} />
-            <Background color="#E4E4E7" gap={20} size={1} />
+            <Background color={gridMode === "dark" ? "#ffffff15" : "#DBDED4"} gap={28} size={1} />
+            <Controls className="bg-white! border border-[#DBDED4]! shadow-md! rounded-md!" />
+            <MiniMap
+              className="bg-white! border border-[#DBDED4]! shadow-md! rounded-md overflow-hidden"
+              nodeColor={(node: any) => {
+                if (node.type === "geminiPro") return SIGNAL;
+                if (node.type === "cropImage") return AUX;
+                if (node.type === "requestInputs") return CIRCUIT;
+                return INK;
+              }}
+            />
+
+            {/* Floating Quick Canvas Control Bar */}
+            <Panel position="bottom-right" className="m-4 flex items-center gap-2 bg-white/95 backdrop-blur-md p-1.5 rounded-lg border border-[#DBDED4] shadow-md">
+              <button
+                onClick={() => setGridMode((g) => (g === "light" ? "dark" : "light"))}
+                className="p-1.5 rounded hover:bg-[#F2F4EF] text-[#74786F] hover:text-[#15191F]"
+                title="Toggle Grid Theme"
+              >
+                {gridMode === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4 text-[#EA5A2B]" />}
+              </button>
+              <button
+                onClick={handleAutoLayout}
+                className="p-1.5 rounded hover:bg-[#F2F4EF] text-[#74786F] hover:text-[#15191F]"
+                title="Auto-Layout Graph"
+              >
+                <Layers className="h-4 w-4" />
+              </button>
+            </Panel>
           </ReactFlow>
         </div>
-      </div>
 
-      {/* 5. Right Sidebar - Execution History Drawer */}
-      <aside
-        className={`h-full bg-white border-l border-zinc-200 shadow-2xl z-30 transition-all duration-300 flex flex-col ${
-          historyOpen ? 'w-[300px]' : 'w-0 overflow-hidden border-l-0'
-        }`}
-      >
-        <div className="w-[300px] h-full flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
-            <span className="text-[13.5px] font-bold text-zinc-800 tracking-tight">Execution History</span>
-            <button
-              onClick={() => setHistoryOpen(false)}
-              className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-800 transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex items-center gap-1 mx-4 mt-3 mb-3 bg-zinc-100 rounded-[10px] p-1">
-            <button
-              onClick={() => setHistoryTab("ui")}
-              className={`flex-1 text-[12px] font-semibold py-1.5 rounded-[8px] transition-all cursor-pointer ${
-                historyTab === "ui"
-                  ? "bg-white text-zinc-800 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-700"
-              }`}
-            >
-              UI Runs
-            </button>
-            <button
-              onClick={() => setHistoryTab("api")}
-              className={`flex-1 text-[12px] font-semibold py-1.5 rounded-[8px] transition-all cursor-pointer ${
-                historyTab === "api"
-                  ? "bg-white text-zinc-800 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-700"
-              }`}
-            >
-              API Runs
-            </button>
-          </div>
-
-          {/* Filter row */}
-          <div className="flex items-center justify-between px-4 pb-2">
-            <span className="text-[12px] font-semibold text-zinc-500">Run history</span>
-            <div className="relative">
-              <select
-                value={historyFilter}
-                onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}
-                className="text-[11.5px] font-semibold text-zinc-700 bg-transparent border-0 outline-none cursor-pointer appearance-none pr-4 py-0.5"
-              >
-                <option value="all">All</option>
-                <option value="running">Running</option>
-                <option value="completed">Completed</option>
-                <option value="canceled">Canceled</option>
-              </select>
-              <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-zinc-500 text-[10px]">▾</span>
-            </div>
-          </div>
-
-          {/* Run cards */}
-          <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-2">
-            {(() => {
-              const filtered = (historyTab === "api" ? [] : runHistory).filter((run) => {
-                if (historyFilter === "all") return true;
-                const s = run.status?.toLowerCase();
-                if (historyFilter === "running") return s === "running";
-                if (historyFilter === "completed") return s === "success" || s === "completed";
-                if (historyFilter === "canceled") return s === "canceled" || s === "cancelled" || s === "partial";
-                return true;
-              });
-
-              if (historyTab === "api") {
-                return (
-                  <div className="flex flex-col items-center justify-center flex-1 text-center text-zinc-400 py-10">
-                    <Clock className="h-6 w-6 text-zinc-300 mb-2" />
-                    <span className="text-[11px] font-semibold">No API runs yet</span>
-                  </div>
-                );
-              }
-
-              if (filtered.length === 0) {
-                return (
-                  <div className="flex flex-col items-center justify-center flex-1 text-center text-zinc-400 py-10 border border-dashed border-zinc-200 rounded-2xl mx-1">
-                    <Clock className="h-6 w-6 text-zinc-300 mb-2" />
-                    <span className="text-[11px] font-bold tracking-wide">No runs yet</span>
-                    <span className="text-[10px] text-zinc-400 mt-0.5">Click &#39;New run&#39; to start.</span>
-                  </div>
-                );
-              }
-
-              return filtered.map((run) => {
-                const status = run.status?.toLowerCase();
-                const isRunning = status === "running";
-                const isCompleted = status === "success" || status === "completed";
-                const isCanceled = status === "canceled" || status === "cancelled" || status === "partial";
-
-                const dotColor = isRunning
-                  ? "bg-blue-500"
-                  : isCompleted
-                  ? "bg-emerald-500"
-                  : isCanceled
-                  ? "bg-zinc-400"
-                  : "bg-rose-500";
-
-                const statusLabel = isRunning
-                  ? "Running"
-                  : isCompleted
-                  ? "Completed"
-                  : isCanceled
-                  ? "Canceled"
-                  : run.status;
-
-                const creditsM = run.duration
-                  ? (run.duration / 1000 / 100).toFixed(2)
-                  : "0";
-
-                const formattedDate = (() => {
-                  try {
-                    const d = new Date(run.createdAt);
-                    return d.toLocaleString("en-GB", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: false,
-                    }).replace(",", ",");
-                  } catch { return run.createdAt; }
-                })();
-
-                return (
-                  <div
-                    key={run.id}
-                    onClick={() => setSelectedRun(run)}
-                    className={`px-3.5 py-3 rounded-[12px] cursor-pointer transition-all border ${
-                      isRunning
-                        ? "border-blue-400 bg-white shadow-[0_0_0_1px_rgba(96,165,250,0.3)]"
-                        : "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          isRunning ? dotColor + " animate-pulse" : dotColor
-                        }`} />
-                        <span className="text-[12.5px] font-semibold text-zinc-800">{statusLabel}</span>
-                      </div>
-                      <span className="text-[11px] text-zinc-400 font-medium">{formattedDate}</span>
-                    </div>
-                    <p className="text-[11px] text-zinc-500 ml-4">Credits: {creditsM}M</p>
-                  </div>
-                );
-              });
-            })()}
-          </div>
-        </div>
-      </aside>
-
-      {/* 6. Node Logs Details Side Drawer Modal */}
-      {selectedRun && (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-end bg-zinc-900/40 backdrop-blur-sm"
-          onClick={() => setSelectedRun(null)}
-        >
-          <div
-            className="w-full max-w-lg h-full bg-white border-l border-zinc-200 p-6 flex flex-col gap-5 shadow-2xl animate-in slide-in-from-right duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
+        {/* ── Right Inspector Drawer ─────────────────────────────── */}
+        {selectedNode && (
+          <aside className="z-30 w-80 bg-white border-l border-[#DBDED4] flex flex-col shadow-lg animate-in slide-in-from-right duration-200">
+            {/* Inspector Header */}
+            <div className="p-3.5 border-b border-[#DBDED4] bg-[#F2F4EF] flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-zinc-800 tracking-tight">Run Details</h3>
-                <p className="text-[10px] font-mono text-zinc-400 mt-1">ID: {selectedRun.id}</p>
+                <MonoLabel className="text-[#EA5A2B] block">[NODE INSPECTOR]</MonoLabel>
+                <h3 className="font-bold text-sm text-[#15191F]" style={display}>
+                  {(selectedNode.data.title as string) || selectedNode.type}
+                </h3>
               </div>
-              <button
-                onClick={() => setSelectedRun(null)}
-                className="p-1.5 text-zinc-450 hover:text-zinc-700 rounded-lg hover:bg-zinc-100 transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
+              <button onClick={() => setSelectedNodeId(null)} className="p-1 text-[#74786F] hover:text-[#15191F] rounded">
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-4 bg-zinc-50 border border-zinc-200 p-4 rounded-xl shadow-sm/5">
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] font-bold text-zinc-450 uppercase tracking-wider">Status</span>
-                <span className={`text-xs px-2.5 py-0.5 border rounded-full font-bold uppercase tracking-wider flex items-center gap-1 ${getRunStatusColor(selectedRun.status)}`}>
-                  {getRunStatusIcon(selectedRun.status)}
-                  {selectedRun.status}
-                </span>
-              </div>
-              <div className="h-8 w-px bg-zinc-200"></div>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] font-bold text-zinc-450 uppercase tracking-wider">Created At</span>
-                <span className="text-xs text-zinc-750 font-bold">
-                  {new Date(selectedRun.createdAt).toLocaleString()}
-                </span>
-              </div>
-              <div className="h-8 w-px bg-zinc-200"></div>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] font-bold text-zinc-450 uppercase tracking-wider">Execution Time</span>
-                <span className="text-xs text-zinc-750 font-bold">
-                  {(selectedRun.duration / 1000).toFixed(2)}s
-                </span>
-              </div>
+            {/* Inspector Tabs */}
+            <div className="flex border-b border-[#DBDED4] bg-white text-[11px] font-bold" style={mono}>
+              <button
+                onClick={() => setInspectorTab("config")}
+                className={`flex-1 py-2 text-center border-b-2 ${
+                  inspectorTab === "config" ? "border-[#EA5A2B] text-[#EA5A2B]" : "border-transparent text-[#74786F]"
+                }`}
+              >
+                CONFIG
+              </button>
+              <button
+                onClick={() => setInspectorTab("payload")}
+                className={`flex-1 py-2 text-center border-b-2 ${
+                  inspectorTab === "payload" ? "border-[#EA5A2B] text-[#EA5A2B]" : "border-transparent text-[#74786F]"
+                }`}
+              >
+                DATA
+              </button>
+              <button
+                onClick={() => setInspectorTab("telemetry")}
+                className={`flex-1 py-2 text-center border-b-2 ${
+                  inspectorTab === "telemetry" ? "border-[#EA5A2B] text-[#EA5A2B]" : "border-transparent text-[#74786F]"
+                }`}
+              >
+                STATUS
+              </button>
+              <button
+                onClick={() => setInspectorTab("json")}
+                className={`flex-1 py-2 text-center border-b-2 ${
+                  inspectorTab === "json" ? "border-[#EA5A2B] text-[#EA5A2B]" : "border-transparent text-[#74786F]"
+                }`}
+              >
+                JSON
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-              <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Node execution trace</h4>
-              {selectedRun.logs ? (() => {
-                const logEntries = Object.entries(JSON.parse(selectedRun.logs));
-                const responseEntry = logEntries.find(([nodeId]) => {
-                  const nodeObj = nodes.find((n) => n.id === nodeId);
-                  return nodeObj?.type === "responseNode";
-                });
-                const traceEntries = logEntries.filter(([nodeId]) => {
-                  const nodeObj = nodes.find((n) => n.id === nodeId);
-                  return nodeObj?.type !== "responseNode";
-                });
+            {/* Inspector Tab Body */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {inspectorTab === "config" && (
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <MonoLabel className="block mb-1">NODE TITLE</MonoLabel>
+                    <input
+                      type="text"
+                      value={(selectedNode.data.title as string) || ""}
+                      onChange={(e) => updateNodeData(selectedNode.id, { title: e.target.value })}
+                      className="w-full bg-[#F2F4EF] border border-[#DBDED4] rounded p-2 text-xs font-bold"
+                    />
+                  </div>
 
-                return (
-                  <>
-                    {traceEntries.map(([nodeId, state]: [string, any]) => {
-                  const nodeObj = nodes.find((n) => n.id === nodeId);
-                  const nodeName = nodeObj?.data?.title as string || nodeId;
-                  const nodeTypeLabel = nodeObj?.type || "unknown";
-
-                  return (
-                    <div
-                      key={nodeId}
-                      className="p-4 border border-zinc-200 bg-zinc-50/30 rounded-xl flex flex-col gap-2.5 hover:border-zinc-250 transition-colors shadow-sm/5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-zinc-750">{nodeName}</span>
-                          <span className="text-[8px] px-1.5 py-0.5 bg-zinc-100 border border-zinc-200/80 text-zinc-500 rounded uppercase font-bold">
-                            {nodeTypeLabel}
-                          </span>
-                        </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 border rounded-full font-bold uppercase tracking-wider flex items-center gap-1 ${getRunStatusColor(state.status)}`}>
-                          {getRunStatusIcon(state.status)}
-                          {state.status}
-                        </span>
+                  {selectedNode.type === "geminiPro" && (
+                    <>
+                      <div>
+                        <MonoLabel className="block mb-1">PROMPT TEMPLATE</MonoLabel>
+                        <textarea
+                          rows={4}
+                          value={(selectedNode.data.prompt as string) || ""}
+                          onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                          className="w-full bg-[#F2F4EF] border border-[#DBDED4] rounded p-2 text-xs font-mono resize-none focus:border-[#EA5A2B]"
+                          placeholder="Type LLM prompt here..."
+                        />
                       </div>
+                      <div>
+                        <MonoLabel className="block mb-1">TEMPERATURE ({(selectedNode.data.temperature as number) ?? 0.7})</MonoLabel>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1.5"
+                          step="0.1"
+                          value={(selectedNode.data.temperature as number) ?? 0.7}
+                          onChange={(e) => updateNodeData(selectedNode.id, { temperature: parseFloat(e.target.value) })}
+                          className="w-full accent-[#EA5A2B]"
+                        />
+                      </div>
+                    </>
+                  )}
 
-                      {state.duration && (
-                        <div className="text-[9px] text-zinc-450 flex items-center gap-1 font-semibold">
-                          <Clock className="h-3 w-3" /> Done in {(state.duration / 1000).toFixed(2)}s
-                        </div>
-                      )}
-
-                      {/* Display Outputs — type-aware */}
-                      {state.output && (() => {
-                        const hasAnyOutput =
-                          state.output.error ||
-                          state.output.product_text ||
-                          state.output.product_photo ||
-                          state.output.cropped_image ||
-                          state.output.output;
-                        if (!hasAnyOutput) return null;
-
-                        return (
-                          <div className="mt-1 pt-2 border-t border-zinc-150/65 flex flex-col gap-2.5">
-                            {/* Error */}
-                            {state.output.error && (
-                              <div className="text-xs text-rose-700 bg-rose-50 border border-rose-100 p-2.5 rounded-lg font-mono leading-relaxed">
-                                {state.output.error}
-                              </div>
-                            )}
-
-                            {/* Request Inputs: product text */}
-                            {state.output.product_text && (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-bold text-zinc-450 uppercase">Product Text</span>
-                                <div className="text-[11px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-lg p-2.5">
-                                  {state.output.product_text}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Request Inputs: product photo */}
-                            {state.output.product_photo && (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-bold text-zinc-450 uppercase">Product Photo</span>
-                                <div className="rounded-lg overflow-hidden border border-zinc-200 bg-zinc-50 w-full aspect-video shadow-sm">
-                                  <img src={state.output.product_photo} className="w-full h-full object-cover" alt="Product" />
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Crop Image: cropped output */}
-                            {state.output.cropped_image && (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-bold text-zinc-450 uppercase">Cropped Output</span>
-                                <div className="rounded-lg overflow-hidden border border-zinc-200 bg-zinc-50 w-full shadow-sm">
-                                  <img src={state.output.cropped_image} className="w-full object-cover max-h-40" alt="Cropped" />
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Gemini: AI text output */}
-                            {state.output.output && (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-bold text-zinc-450 uppercase">AI Response</span>
-                                <div className="text-[11px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-lg p-2.5 max-h-[160px] overflow-y-auto space-y-1">
-                                  {(state.output.output as string)
-                                    .split('\n')
-                                    .filter((l: string) => l.trim() !== '')
-                                    .map((l: string, li: number) => {
-                                      if (/^#{1,2}\s/.test(l)) {
-                                        return <p key={li} className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 pt-1">{l.replace(/^#{1,2}\s/, '')}</p>;
-                                      }
-                                      const parts = l.split(/(\*\*[^*]+\*\*)/g);
-                                      return (
-                                        <p key={li} className={l.startsWith('•') || l.startsWith('-') ? 'pl-2' : ''}>
-                                          {parts.map((part: string, pi: number) =>
-                                            /^\*\*(.+)\*\*$/.test(part)
-                                              ? <span key={pi} className="font-semibold text-zinc-800">{part.replace(/\*\*/g, '')}</span>
-                                              : <span key={pi}>{part}</span>
-                                          )}
-                                        </p>
-                                      );
-                                    })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
+                  {selectedNode.type === "cropImage" && (
+                    <div>
+                      <MonoLabel className="block mb-1">ASPECT RATIO</MonoLabel>
+                      <select
+                        value={(selectedNode.data.aspectRatio as string) || "1:1"}
+                        onChange={(e) => updateNodeData(selectedNode.id, { aspectRatio: e.target.value })}
+                        className="w-full bg-[#F2F4EF] border border-[#DBDED4] rounded p-2 text-xs font-bold"
+                      >
+                        <option value="1:1">1:1 Square</option>
+                        <option value="16:9">16:9 Landscape</option>
+                        <option value="4:5">4:5 Vertical</option>
+                      </select>
                     </div>
-                  );
-                    })}
+                  )}
 
-                    {/* Final Output Card — Response node summary */}
-                    {responseEntry && (() => {
-                      const [, respState] = responseEntry as [string, any];
-                      if (!respState?.output) return null;
-                      const { text, image_1, image_2 } = respState.output;
-                      if (!text && !image_1 && !image_2) return null;
-                      return (
-                        <div className="p-4 border border-emerald-200 bg-emerald-50/40 rounded-xl flex flex-col gap-3">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                            <span className="text-xs font-bold text-emerald-700">Final Output</span>
-                          </div>
-                          {text && (
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[9px] font-bold text-zinc-450 uppercase">Marketing Copy</span>
-                              <div className="text-[11px] leading-relaxed text-zinc-700 bg-white border border-zinc-200 rounded-lg p-2.5 max-h-[160px] overflow-y-auto space-y-1">
-                                {(text as string)
-                                  .split('\n')
-                                  .filter((l: string) => l.trim() !== '')
-                                  .map((l: string, li: number) => {
-                                    if (/^#{1,2}\s/.test(l)) {
-                                      return <p key={li} className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 pt-1">{l.replace(/^#{1,2}\s/, '')}</p>;
-                                    }
-                                    const parts = l.split(/(\*\*[^*]+\*\*)/g);
-                                    return (
-                                      <p key={li} className={l.startsWith('•') || l.startsWith('-') ? 'pl-2' : ''}>
-                                        {parts.map((part: string, pi: number) =>
-                                          /^\*\*(.+)\*\*$/.test(part)
-                                            ? <span key={pi} className="font-semibold text-zinc-800">{part.replace(/\*\*/g, '')}</span>
-                                            : <span key={pi}>{part}</span>
-                                        )}
-                                      </p>
-                                    );
-                                  })}
-                              </div>
-                            </div>
-                          )}
-                          {(image_1 || image_2) && (
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[9px] font-bold text-zinc-450 uppercase">Image Assets</span>
-                              <div className="grid grid-cols-2 gap-2">
-                                {image_1 && (
-                                  <div>
-                                    <span className="text-[8px] font-semibold text-zinc-500 uppercase block mb-1">Tight (1:1)</span>
-                                    <img src={image_1} className="rounded border border-zinc-200 aspect-square object-cover w-full" alt="Tight crop" />
-                                  </div>
-                                )}
-                                {image_2 && (
-                                  <div>
-                                    <span className="text-[8px] font-semibold text-zinc-500 uppercase block mb-1">Wide (16:9)</span>
-                                    <img src={image_2} className="rounded border border-zinc-200 aspect-square object-cover w-full" alt="Wide crop" />
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </>
-                );
-              })() : (
-                <div className="text-xs text-zinc-450 italic">No node traces available for this run.</div>
+                  <div className="pt-4 border-t border-[#DBDED4]">
+                    <button
+                      onClick={() => {
+                        setNodes(nodes.filter((n) => n.id !== selectedNode.id));
+                        setSelectedNodeId(null);
+                        pushToast("Node deleted from canvas.", "info");
+                      }}
+                      className="w-full py-2 rounded bg-[#B23A2E]/10 border border-[#B23A2E]/30 text-[#B23A2E] text-xs font-bold uppercase tracking-wider hover:bg-[#B23A2E] hover:text-white transition-colors cursor-pointer"
+                      style={mono}
+                    >
+                      DELETE THIS NODE
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {inspectorTab === "payload" && (
+                <div className="flex flex-col gap-3">
+                  <MonoLabel className="block">LIVE NODE DATA STATE</MonoLabel>
+                  <pre className="p-3 bg-[#15191F] text-white rounded text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                    {JSON.stringify(selectedNode.data, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {inspectorTab === "telemetry" && (
+                <div className="flex flex-col gap-3">
+                  <MonoLabel className="block">EXECUTION STATUS</MonoLabel>
+                  <div className="p-3 rounded border border-[#DBDED4] bg-[#F2F4EF] flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase" style={mono}>
+                      Status:
+                    </span>
+                    <StatusChip
+                      label={executingNodes[selectedNode.id] || "IDLE"}
+                      color={
+                        executingNodes[selectedNode.id] === "running"
+                          ? SIGNAL
+                          : executingNodes[selectedNode.id] === "success"
+                          ? SUCCESS
+                          : executingNodes[selectedNode.id] === "failed"
+                          ? FAILED
+                          : GRAPHITE
+                      }
+                      pulse={executingNodes[selectedNode.id] === "running"}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {inspectorTab === "json" && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <MonoLabel>RAW SPEC</MonoLabel>
+                    <CopyButton text={JSON.stringify(selectedNode, null, 2)} />
+                  </div>
+                  <pre className="p-3 bg-[#15191F] text-white rounded text-[10px] font-mono overflow-x-auto">
+                    {JSON.stringify(selectedNode, null, 2)}
+                  </pre>
+                </div>
               )}
             </div>
+          </aside>
+        )}
+      </div>
+
+      {/* ── Bottom Telemetry Log Terminal Drawer ─────────────────── */}
+      <div className={`z-40 border-t border-[#DBDED4] bg-[#15191F] text-white transition-all ${isLogTerminalOpen ? "h-36" : "h-9"}`}>
+        {/* Terminal Header */}
+        <div
+          onClick={() => setIsLogTerminalOpen((open) => !open)}
+          className="px-4 py-2 bg-[#0F1217] border-b border-white/10 flex items-center justify-between cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <Terminal className="h-4 w-4 text-[#EA5A2B]" />
+            <span className="font-bold uppercase tracking-wider text-white">LIVE EXECUTION TELEMETRY LOG</span>
+            <span className="text-[10px] text-[#74786F]">• {isRunning ? "STREAMING RUN DATA..." : "SYSTEM IDLE"}</span>
           </div>
+
+          <button className="text-[#74786F] hover:text-white text-xs font-mono">{isLogTerminalOpen ? "COLLAPSE [↓]" : "EXPAND [↑]"}</button>
         </div>
-      )}
+
+        {/* Terminal Content */}
+        {isLogTerminalOpen && (
+          <div className="p-3 font-mono text-[11px] h-24 overflow-y-auto space-y-1 text-[#D2D5CB]">
+            <div>[02:24:00] Pipeline initialized with {nodes.length} nodes and {edges.length} connections.</div>
+            {isRunning && <div className="text-[#EA5A2B] animate-pulse">[02:24:01] ⚡ Executing Directed Acyclic Graph nodes...</div>}
+            {Object.entries(executingNodes).map(([nodeId, status]) => (
+              <div key={nodeId} className="flex items-center gap-2">
+                <span className="text-[#74786F]">&gt;</span>
+                <span className="text-white font-bold">{nodeId}</span>
+                <span>status:</span>
+                <span
+                  className={
+                    status === "success"
+                      ? "text-[#1F8A6B] font-bold uppercase"
+                      : status === "running"
+                      ? "text-[#EA5A2B] font-bold uppercase"
+                      : "text-[#74786F] uppercase"
+                  }
+                >
+                  {status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Toast Notification Stack */}
+      <div className="fixed bottom-12 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto flex items-center gap-2.5 px-4 py-2.5 rounded-lg border shadow-xl text-xs font-bold animate-in slide-in-from-bottom-2 duration-200 ${
+              toast.tone === "error"
+                ? "bg-[#B23A2E] text-white border-[#B23A2E]"
+                : toast.tone === "success"
+                ? "bg-[#1F8A6B] text-white border-[#1F8A6B]"
+                : "bg-[#15191F] text-white border-[#15191F]"
+            }`}
+            style={mono}
+          >
+            <Info className="h-4 w-4" />
+            <span>{toast.message}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 export default function CanvasPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+  const resolvedParams = React.use(params);
   return (
     <ReactFlowProvider>
       <CanvasContent id={resolvedParams.id} />
