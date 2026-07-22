@@ -137,7 +137,18 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
 // Wrapper for entire app Provider
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (isClerkConfigured) {
-    return <ClerkProvider afterSignOutUrl="/sign-in">{children}</ClerkProvider>;
+    return (
+      <ClerkProvider
+        afterSignOutUrl="/sign-in"
+        appearance={{
+          elements: {
+            devModeBadge: { display: "none" },
+          },
+        }}
+      >
+        {children}
+      </ClerkProvider>
+    );
   }
   return <MockAuthProvider>{children}</MockAuthProvider>;
 }

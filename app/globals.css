@@ -103,3 +103,15 @@ body {
 .animate-dash-flow {
   animation: dash-flow 1.2s linear infinite;
 }
+
+/* Hide Clerk Development Mode Badge & Watermark */
+.cl-devMode,
+.cl-dev-mode,
+[class*="cl-devMode"],
+[class*="cl-dev-mode"],
+[class*="devModeBadge"],
+[class*="dev-mode-badge"],
+.cl-internal-ph721x,
+[class*="cl-internal-"][class*="dev"] {
+  display: none !important;
+}
