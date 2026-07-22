@@ -134,18 +134,22 @@ export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const clerkAppearance = {
+  layout: {
+    unsafe_disableDevelopmentModeWarnings: true,
+  },
+  elements: {
+    devModeBadge: { display: "none !important" },
+    footerPages: { display: "none !important" },
+    footerPagesLink: { display: "none !important" },
+  },
+};
+
 // Wrapper for entire app Provider
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (isClerkConfigured) {
     return (
-      <ClerkProvider
-        afterSignOutUrl="/sign-in"
-        appearance={{
-          elements: {
-            devModeBadge: { display: "none" },
-          },
-        }}
-      >
+      <ClerkProvider afterSignOutUrl="/sign-in" appearance={clerkAppearance}>
         {children}
       </ClerkProvider>
     );
@@ -282,14 +286,14 @@ function MockUserButton() {
 // Export Auth Form configurations
 export function SignIn() {
   if (isClerkConfigured) {
-    return <ClerkSignIn routing="path" path="/sign-in" />;
+    return <ClerkSignIn routing="path" path="/sign-in" appearance={clerkAppearance} />;
   }
   return <MockSignInForm />;
 }
 
 export function SignUp() {
   if (isClerkConfigured) {
-    return <ClerkSignUp routing="path" path="/sign-up" />;
+    return <ClerkSignUp routing="path" path="/sign-up" appearance={clerkAppearance} />;
   }
   return <MockSignUpForm />;
 }

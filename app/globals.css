@@ -104,14 +104,20 @@ body {
   animation: dash-flow 1.2s linear infinite;
 }
 
-/* Hide Clerk Development Mode Badge & Watermark */
+/* Hide Clerk Development Mode Badge & Footer Warnings */
 .cl-devMode,
 .cl-dev-mode,
+.cl-devModeBadge,
 [class*="cl-devMode"],
 [class*="cl-dev-mode"],
 [class*="devModeBadge"],
 [class*="dev-mode-badge"],
 .cl-internal-ph721x,
-[class*="cl-internal-"][class*="dev"] {
+[class*="cl-internal-"][class*="dev"],
+.cl-footerPages,
+.cl-footerPagesLink,
+[class*="cl-footerPages"],
+[class*="cl-footerPagesLink"],
+[class*="cl-footer"] > div:last-child {
   display: none !important;
 }
